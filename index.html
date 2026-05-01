@@ -818,280 +818,283 @@
         </div>
     </div>
 
-    <script>
+        <script>
         let publications = [];
         let filteredPublications = [];
         let bookmarkedIds = new Set();
         let activeTags = new Set();
         let currentSearchTerm = '';
 
-        // ─── Fecha de hoy (CR, sin fines de semana) ──────────────────────────
+        // ─── Fecha de edición (CR, sin fines de semana) ──────────────────────
         function getEditionDate() {
             const today = new Date();
             const dow = today.getDay();
-            if (dow === 0) today.setDate(today.getDate() - 2); // domingo → viernes
-            if (dow === 6) today.setDate(today.getDate() - 1); // sábado  → viernes
+            if (dow === 0) today.setDate(today.getDate() - 2);
+            if (dow === 6) today.setDate(today.getDate() - 1);
             const yyyy = today.getFullYear();
             const mm   = String(today.getMonth() + 1).padStart(2, '0');
             const dd   = String(today.getDate()).padStart(2, '0');
             return {
-                dateStr: `${yyyy}-${mm}-${dd}`,
+                yyyy, mm, dd,
+                dateStr: yyyy + '-' + mm + '-' + dd,
                 label: today.toLocaleDateString('es-CR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })
             };
         }
 
-        // ─── Carga via API de Claude con web_search ───────────────────────────
+        // URL directa del PDF oficial: COMP_DD_MM_YYYY.pdf
+        function getPdfUrl(e) {
+            return 'https://www.imprentanacional.go.cr/pub/' + e.yyyy + '/' + e.mm + '/' + e.dd + '/COMP_' + e.dd + '_' + e.mm + '_' + e.yyyy + '.pdf';
+        }
+
+        // ─── Pipeline principal ───────────────────────────────────────────────
         async function fetchGacetaDelDia() {
-            const { dateStr, label } = getEditionDate();
-            showLoading(label);
+            const edition = getEditionDate();
+            const pdfUrl  = getPdfUrl(edition);
+            const { dateStr, label } = edition;
+            showLoading(label, pdfUrl);
 
-            const prompt = `Eres un asistente jurídico especializado en derecho costarricense.
+            // 1. Descargar PDF oficial directamente
+            let pdfBase64 = null;
+            try {
+                const pdfResp = await fetch(pdfUrl);
+                if (pdfResp.ok) {
+                    const buffer = await pdfResp.arrayBuffer();
+                    const bytes  = new Uint8Array(buffer);
+                    let bin = '';
+                    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                    pdfBase64 = btoa(bin);
+                }
+            } catch (_) {}
 
-Busca en la web las publicaciones de La Gaceta Oficial de Costa Rica del día ${label} (${dateStr}).
-Consulta el sitio https://www.imprentanacional.go.cr/gaceta/ y cualquier otra fuente oficial disponible.
+            // 2. Enviar a Claude para extracción estructurada
+            await analizarConClaude({ dateStr, label, pdfBase64, pdfUrl });
+        }
 
-Devuelve ÚNICAMENTE un JSON válido (sin texto adicional, sin markdown, sin \`\`\`) con este formato exacto:
+        async function analizarConClaude({ dateStr, label, pdfBase64, pdfUrl }) {
+            const instruccion = 'Eres un asistente juridico especializado en derecho costarricense.\n\n'
+                + 'Analiza la Gaceta Oficial de Costa Rica del ' + label + ' y extrae TODOS sus documentos.\n\n'
+                + 'Devuelve UNICAMENTE un objeto JSON valido sin markdown ni texto adicional con este formato:\n'
+                + '{\n'
+                + '  "edicion": "numero o identificador de la edicion",\n'
+                + '  "fecha": "' + dateStr + '",\n'
+                + '  "documentos": [\n'
+                + '    {\n'
+                + '      "tipo": "ley|decreto|resolucion|acuerdo|aviso|otro",\n'
+                + '      "titulo": "Titulo completo tal como aparece en la Gaceta",\n'
+                + '      "institucion": "Nombre de la institucion emisora",\n'
+                + '      "numero": "Numero del acto juridico",\n'
+                + '      "resumen": "Resumen juridico en 4-6 oraciones: que dispone, a quien afecta, que derechos u obligaciones crea, vigencia.",\n'
+                + '      "materias": ["tributario","laboral","penal","administrativo","ambiental","comercial","constitucional"]\n'
+                + '    }\n'
+                + '  ]\n'
+                + '}\n\n'
+                + 'Incluye ABSOLUTAMENTE TODOS los actos publicados. No omitas ninguno.';
 
-{
-  "edicion": "Número de gaceta o fecha",
-  "fecha": "${dateStr}",
-  "documentos": [
-    {
-      "id": 1,
-      "tipo": "ley|decreto|resolucion|acuerdo|aviso|otro",
-      "titulo": "Título completo del documento",
-      "institucion": "Institución que lo emite",
-      "numero": "Número de ley/decreto/resolución",
-      "resumen": "Resumen claro del contenido en 3-5 oraciones. Explica qué hace, a quién afecta y cuál es su relevancia jurídica.",
-      "materias": ["tributario|laboral|penal|administrativo|ambiental|comercial|constitucional"]
-    }
-  ]
-}
+            let userContent, tools;
 
-Si no hay publicación ese día o no encuentras datos confiables, devuelve: {"error": "sin_publicacion", "fecha": "${dateStr}"}
-
-Incluye TODOS los documentos relevantes que encuentres: leyes, decretos ejecutivos, resoluciones, acuerdos, avisos de instituciones públicas.`;
+            if (pdfBase64) {
+                userContent = [
+                    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+                    { type: 'text', text: instruccion }
+                ];
+                tools = undefined;
+            } else {
+                userContent = instruccion + '\n\nNo se pudo descargar el PDF. Buscalo en la web: ' + pdfUrl + ' o en https://www.imprentanacional.go.cr/gaceta/';
+                tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+            }
 
             try {
+                const body = {
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 8000,
+                    messages: [{ role: 'user', content: userContent }]
+                };
+                if (tools) body.tools = tools;
+
                 const response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 8000,
-                        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-                        messages: [{ role: 'user', content: prompt }]
-                    })
+                    body: JSON.stringify(body)
                 });
 
-                if (!response.ok) throw new Error(`API error: ${response.status}`);
+                if (!response.ok) throw new Error('API ' + response.status);
                 const data = await response.json();
 
-                // Extraer el texto de la respuesta
-                const textBlock = data.content.find(b => b.type === 'text');
-                if (!textBlock) throw new Error('Sin texto en respuesta');
+                const textBlock = data.content.find(function(b) { return b.type === 'text'; });
+                if (!textBlock || !textBlock.text) throw new Error('Respuesta vacia de la API');
 
-                const raw = textBlock.text.trim()
-                    .replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+                const raw = textBlock.text.trim();
+                const jsonMatch = raw.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) throw new Error('No se encontro JSON en la respuesta');
 
-                const parsed = JSON.parse(raw);
-
-                if (parsed.error) {
-                    showNoEdition(label, dateStr);
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.error || !parsed.documentos || !parsed.documentos.length) {
+                    showNoEdition(label, dateStr, pdfUrl);
                     return;
                 }
 
-                publications = (parsed.documentos || []).map((d, i) => ({
-                    id: i + 1,
-                    type: d.tipo || 'otro',
-                    title: d.titulo || '(Sin título)',
-                    date: parsed.fecha || dateStr,
-                    institution: d.institucion || 'Institución pública',
-                    number: d.numero || '—',
-                    content: d.resumen || '',
-                    tags: Array.isArray(d.materias) ? d.materias : []
-                }));
+                publications = parsed.documentos.map(function(d, i) {
+                    return {
+                        id: i + 1,
+                        type: d.tipo || 'otro',
+                        title: d.titulo || '(Sin titulo)',
+                        date: parsed.fecha || dateStr,
+                        institution: d.institucion || 'Institucion publica',
+                        number: d.numero || '-',
+                        content: d.resumen || '',
+                        tags: Array.isArray(d.materias) ? d.materias : [],
+                        pdfUrl: pdfUrl
+                    };
+                });
 
-                filteredPublications = [...publications];
+                filteredPublications = publications.slice();
                 updateStats();
                 renderPublications();
 
-                const hora = new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+                var hora = new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
                 document.getElementById('lastUpdate').textContent = hora;
+                var src = pdfBase64 ? 'PDF oficial' : 'busqueda web';
                 document.getElementById('editionBadge').textContent =
-                    `Gaceta — ${label} · ${publications.length} documentos · Actualizado ${hora}`;
+                    'Gaceta ' + (parsed.edicion || label) + ' \u00b7 ' + publications.length + ' documentos \u00b7 ' + src + ' \u00b7 ' + hora;
 
             } catch (err) {
                 console.error(err);
-                showError(label, dateStr, err.message);
+                showError(label, dateStr, pdfUrl, err.message);
             }
         }
 
         // ─── Estados de UI ────────────────────────────────────────────────────
-        function showLoading(label) {
-            document.getElementById('editionBadge').textContent = 'Consultando edición del día…';
-            document.getElementById('publicationsContainer').innerHTML = `
-                <div class="loading-state">
-                    <div class="loading-spinner"></div>
-                    <h3>Consultando La Gaceta</h3>
-                    <p>${label}</p>
-                    <p class="loading-sub">Buscando publicaciones oficiales del día con IA…</p>
-                </div>`;
+        function showLoading(label, pdfUrl) {
+            document.getElementById('editionBadge').textContent = 'Cargando edicion del dia...';
+            document.getElementById('publicationsContainer').innerHTML =
+                '<div class="loading-state">'
+                + '<div class="loading-spinner"></div>'
+                + '<h3>Consultando La Gaceta</h3>'
+                + '<p>' + label + '</p>'
+                + '<p class="loading-sub">Descargando PDF oficial y procesando con IA...</p>'
+                + '<p class="loading-sub" style="margin-top:0.5rem;font-size:0.8rem;opacity:0.6">' + pdfUrl + '</p>'
+                + '</div>';
         }
 
-        function showNoEdition(label, dateStr) {
-            document.getElementById('editionBadge').textContent = label + ' — Sin publicación';
-            document.getElementById('publicationsContainer').innerHTML = `
-                <div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:80px;height:80px;opacity:0.25;margin-bottom:1.5rem;stroke:var(--accent)">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    <h3>Sin publicación ordinaria este día</h3>
-                    <p>${label}</p>
-                    <p style="margin-top:0.5rem;font-size:0.9rem">La Gaceta no publica los fines de semana ni días feriados.</p>
-                    <a href="https://www.imprentanacional.go.cr/gaceta/" target="_blank"
-                       class="btn btn-primary" style="display:inline-block;text-decoration:none;margin-top:1.5rem;padding:0.875rem 2rem;">
-                        Verificar en el sitio oficial →
-                    </a>
-                </div>`;
+        function showNoEdition(label, dateStr, pdfUrl) {
+            document.getElementById('editionBadge').textContent = label + ' - Sin publicacion';
+            document.getElementById('publicationsContainer').innerHTML =
+                '<div class="empty-state">'
+                + '<h3>Sin publicacion ordinaria este dia</h3>'
+                + '<p>' + label + '</p>'
+                + '<p style="margin-top:0.5rem;font-size:0.9rem">La Gaceta no publica los fines de semana ni dias feriados.</p>'
+                + '<div style="margin-top:1.5rem;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">'
+                + '<a href="' + pdfUrl + '" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;padding:0.875rem 2rem">Descargar PDF del dia</a>'
+                + '<a href="https://www.imprentanacional.go.cr/gaceta/" target="_blank" class="btn btn-secondary" style="display:inline-block;text-decoration:none;padding:0.875rem 2rem">Abrir sitio oficial</a>'
+                + '</div></div>';
         }
 
-        function showError(label, dateStr, msg) {
-            document.getElementById('editionBadge').textContent = 'Error al cargar — ' + label;
-            document.getElementById('publicationsContainer').innerHTML = `
-                <div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:80px;height:80px;opacity:0.25;margin-bottom:1.5rem;stroke:#c0392b">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                    <h3>No fue posible cargar la edición</h3>
-                    <p style="font-size:0.85rem;color:var(--text-muted);margin:0.5rem 0 1.5rem">${msg}</p>
-                    <button class="btn btn-primary" onclick="fetchGacetaDelDia()">↺ Intentar nuevamente</button>
-                    <a href="https://www.imprentanacional.go.cr/gaceta/" target="_blank"
-                       class="btn btn-secondary" style="display:inline-block;text-decoration:none;margin-left:1rem;padding:0.875rem 2rem;">
-                        Abrir sitio oficial →
-                    </a>
-                </div>`;
+        function showError(label, dateStr, pdfUrl, msg) {
+            document.getElementById('editionBadge').textContent = 'Error al cargar - ' + label;
+            document.getElementById('publicationsContainer').innerHTML =
+                '<div class="empty-state">'
+                + '<h3>No fue posible cargar la edicion</h3>'
+                + '<p style="font-size:0.85rem;color:var(--text-muted);margin:0.5rem 0 1.5rem">' + msg + '</p>'
+                + '<div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">'
+                + '<button class="btn btn-primary" onclick="fetchGacetaDelDia()">Intentar nuevamente</button>'
+                + '<a href="' + pdfUrl + '" target="_blank" class="btn btn-secondary" style="display:inline-block;text-decoration:none;padding:0.875rem 2rem">Descargar PDF directamente</a>'
+                + '</div></div>';
         }
 
         // ─── Render publicaciones ─────────────────────────────────────────────
         function renderPublications() {
-            const container = document.getElementById('publicationsContainer');
+            var container = document.getElementById('publicationsContainer');
 
-            if (filteredPublications.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:80px;height:80px;opacity:0.2;margin-bottom:1.5rem;stroke:var(--accent)">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
-                        <h3>No se encontraron resultados</h3>
-                        <p>Verifique los criterios de búsqueda y filtros aplicados</p>
-                    </div>`;
+            if (!filteredPublications.length) {
+                container.innerHTML =
+                    '<div class="empty-state">'
+                    + '<h3>No se encontraron resultados</h3>'
+                    + '<p>Verifique los criterios de busqueda y filtros aplicados</p>'
+                    + '</div>';
                 return;
             }
 
-            container.innerHTML = filteredPublications.map(pub => {
-                const isBookmarked = bookmarkedIds.has(pub.id);
-                const preview = pub.content.length > 400
-                    ? pub.content.substring(0, 400) + '…'
-                    : pub.content;
-                const highlighted = highlightSearchTerm(preview, currentSearchTerm);
+            container.innerHTML = filteredPublications.map(function(pub) {
+                var isBookmarked = bookmarkedIds.has(pub.id);
+                var preview = pub.content.length > 400 ? pub.content.substring(0, 400) + '...' : pub.content;
+                var highlighted = highlightSearchTerm(preview, currentSearchTerm);
 
-                return `
-                <div class="publication-card ${isBookmarked ? 'bookmarked' : ''}" id="pub-${pub.id}">
-                    <div class="publication-header">
-                        <span class="publication-type type-${pub.type}">${getTypeLabel(pub.type)}</span>
-                        <div class="publication-actions">
-                            <button class="icon-btn" onclick="toggleBookmark(${pub.id})" title="${isBookmarked ? 'Quitar marca' : 'Marcar para revisión'}">
-                                ${isBookmarked ? '★' : '☆'}
-                            </button>
-                            <button class="icon-btn" onclick="copyToClipboard(${pub.id})" title="Copiar al portapapeles">📋</button>
-                        </div>
-                    </div>
-
-                    <h3 class="publication-title">${highlightSearchTerm(pub.title, currentSearchTerm)}</h3>
-
-                    <div class="publication-meta">
-                        <span class="meta-item">📅 ${formatDate(pub.date)}</span>
-                        <span class="meta-item">🏛️ ${pub.institution}</span>
-                        <span class="meta-item">📄 ${pub.number}</span>
-                    </div>
-
-                    <div class="publication-content" id="content-${pub.id}">
-                        ${highlighted}
-                    </div>
-
-                    <div class="publication-footer">
-                        <div class="tags-list">
-                            ${pub.tags.map(tag => `<span class="content-tag">#${tag}</span>`).join('')}
-                        </div>
-                        ${pub.content.length > 400 ? `
-                        <button class="expand-btn" onclick="toggleExpand(${pub.id}, this)">
-                            Ver texto completo →
-                        </button>` : ''}
-                    </div>
-                </div>`;
+                return '<div class="publication-card ' + (isBookmarked ? 'bookmarked' : '') + '" id="pub-' + pub.id + '">'
+                    + '<div class="publication-header">'
+                    + '<span class="publication-type type-' + pub.type + '">' + getTypeLabel(pub.type) + '</span>'
+                    + '<div class="publication-actions">'
+                    + '<button class="icon-btn" onclick="toggleBookmark(' + pub.id + ')" title="' + (isBookmarked ? 'Quitar marca' : 'Marcar para revision') + '">'
+                    + (isBookmarked ? '\u2605' : '\u2606') + '</button>'
+                    + '<button class="icon-btn" onclick="copyToClipboard(' + pub.id + ')" title="Copiar al portapapeles">\uD83D\uDCCB</button>'
+                    + '<a href="' + pub.pdfUrl + '" target="_blank" class="icon-btn" title="Abrir PDF oficial" style="text-decoration:none">\uD83D\uDCC4</a>'
+                    + '</div></div>'
+                    + '<h3 class="publication-title">' + highlightSearchTerm(pub.title, currentSearchTerm) + '</h3>'
+                    + '<div class="publication-meta">'
+                    + '<span class="meta-item">\uD83D\uDCC5 ' + formatDate(pub.date) + '</span>'
+                    + '<span class="meta-item">\uD83C\uDFDB\uFE0F ' + pub.institution + '</span>'
+                    + '<span class="meta-item">\uD83D\uDCC4 ' + pub.number + '</span>'
+                    + '</div>'
+                    + '<div class="publication-content" id="content-' + pub.id + '">' + highlighted + '</div>'
+                    + '<div class="publication-footer">'
+                    + '<div class="tags-list">' + pub.tags.map(function(t) { return '<span class="content-tag">#' + t + '</span>'; }).join('') + '</div>'
+                    + (pub.content.length > 400 ? '<button class="expand-btn" onclick="toggleExpand(' + pub.id + ', this)">Ver texto completo &rarr;</button>' : '')
+                    + '</div></div>';
             }).join('');
         }
 
         function toggleExpand(id, btn) {
-            const pub = publications.find(p => p.id === id);
-            const contentDiv = document.getElementById(`content-${id}`);
-            if (btn.textContent.includes('Ver texto completo')) {
+            var pub = publications.find(function(p) { return p.id === id; });
+            var contentDiv = document.getElementById('content-' + id);
+            if (btn.textContent.indexOf('Ver texto') >= 0) {
                 contentDiv.innerHTML = highlightSearchTerm(pub.content, currentSearchTerm);
-                btn.textContent = '← Contraer texto';
+                btn.textContent = '\u2190 Contraer texto';
             } else {
-                const preview = pub.content.substring(0, 400) + '…';
-                contentDiv.innerHTML = highlightSearchTerm(preview, currentSearchTerm);
-                btn.textContent = 'Ver texto completo →';
+                contentDiv.innerHTML = highlightSearchTerm(pub.content.substring(0, 400) + '...', currentSearchTerm);
+                btn.innerHTML = 'Ver texto completo &rarr;';
             }
         }
 
         function highlightSearchTerm(text, term) {
             if (!term) return text;
-            const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return text.replace(new RegExp(`(${safe})`, 'gi'),
-                '<span class="highlight-term">$1</span>');
+            var safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return text.replace(new RegExp('(' + safe + ')', 'gi'), '<span class="highlight-term">$1</span>');
         }
 
-        // ─── Filtros y búsqueda ───────────────────────────────────────────────
+        // ─── Filtros ──────────────────────────────────────────────────────────
         function searchPublications() {
             currentSearchTerm = document.getElementById('searchInput').value.toLowerCase();
             applyFilters();
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('searchInput').addEventListener('keydown', e => {
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('searchInput').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') searchPublications();
             });
         });
 
         function applyFilters() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const typeFilter  = document.getElementById('typeFilter').value;
-            const dateFilter  = document.getElementById('dateFilter').value;
-            const sortFilter  = document.getElementById('sortFilter').value;
+            var searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            var typeFilter = document.getElementById('typeFilter').value;
+            var dateFilter = document.getElementById('dateFilter').value;
+            var sortFilter = document.getElementById('sortFilter').value;
             currentSearchTerm = searchTerm;
 
-            filteredPublications = publications.filter(pub => {
-                const matchesSearch = !searchTerm ||
-                    pub.title.toLowerCase().includes(searchTerm) ||
-                    pub.content.toLowerCase().includes(searchTerm) ||
-                    pub.institution.toLowerCase().includes(searchTerm) ||
-                    pub.number.toLowerCase().includes(searchTerm);
-                const matchesType = !typeFilter || pub.type === typeFilter;
-                const matchesDate = !dateFilter || pub.date === dateFilter;
-                const matchesTags = activeTags.size === 0 || pub.tags.some(t => activeTags.has(t));
+            filteredPublications = publications.filter(function(pub) {
+                var matchesSearch = !searchTerm
+                    || pub.title.toLowerCase().indexOf(searchTerm) >= 0
+                    || pub.content.toLowerCase().indexOf(searchTerm) >= 0
+                    || pub.institution.toLowerCase().indexOf(searchTerm) >= 0
+                    || pub.number.toLowerCase().indexOf(searchTerm) >= 0;
+                var matchesType = !typeFilter || pub.type === typeFilter;
+                var matchesDate = !dateFilter || pub.date === dateFilter;
+                var matchesTags = !activeTags.size || pub.tags.some(function(t) { return activeTags.has(t); });
                 return matchesSearch && matchesType && matchesDate && matchesTags;
             });
 
             if (sortFilter === 'date-asc')
-                filteredPublications.sort((a, b) => a.date.localeCompare(b.date));
+                filteredPublications.sort(function(a,b) { return a.date.localeCompare(b.date); });
             else
-                filteredPublications.sort((a, b) => b.date.localeCompare(a.date));
+                filteredPublications.sort(function(a,b) { return b.date.localeCompare(a.date); });
 
             updateStats();
             renderPublications();
@@ -1110,8 +1113,8 @@ Incluye TODOS los documentos relevantes que encuentres: leyes, decretos ejecutiv
             document.getElementById('sortFilter').value = 'date-desc';
             currentSearchTerm = '';
             activeTags.clear();
-            document.querySelectorAll('.tag.active').forEach(t => t.classList.remove('active'));
-            filteredPublications = [...publications];
+            document.querySelectorAll('.tag.active').forEach(function(t) { t.classList.remove('active'); });
+            filteredPublications = publications.slice();
             updateStats();
             renderPublications();
         }
@@ -1125,22 +1128,24 @@ Incluye TODOS los documentos relevantes que encuentres: leyes, decretos ejecutiv
         }
 
         function updateBookmarksPanel() {
-            const content  = document.getElementById('bookmarksContent');
-            const bookmarked = publications.filter(p => bookmarkedIds.has(p.id));
-            if (bookmarked.length === 0) {
-                content.innerHTML = '<div class="empty-state"><p>No hay documentos marcados para revisión</p></div>';
+            var content   = document.getElementById('bookmarksContent');
+            var bookmarked = publications.filter(function(p) { return bookmarkedIds.has(p.id); });
+            if (!bookmarked.length) {
+                content.innerHTML = '<div class="empty-state"><p>No hay documentos marcados para revision</p></div>';
                 return;
             }
-            content.innerHTML = bookmarked.map(pub => `
-                <div class="bookmark-item" onclick="scrollToPublication(${pub.id})">
-                    <span class="publication-type type-${pub.type}">${getTypeLabel(pub.type)}</span>
-                    <h4 style="margin:0.5rem 0;font-size:0.95rem">${pub.title}</h4>
-                    <small style="color:var(--text-muted)">${pub.institution}</small>
-                </div>`).join('');
+            content.innerHTML = bookmarked.map(function(pub) {
+                return '<div class="bookmark-item" onclick="scrollToPublication(' + pub.id + ')">'
+                    + '<span class="publication-type type-' + pub.type + '">' + getTypeLabel(pub.type) + '</span>'
+                    + '<h4 style="margin:0.5rem 0;font-size:0.95rem">' + pub.title + '</h4>'
+                    + '<small style="color:var(--text-muted)">' + pub.institution + '</small>'
+                    + '</div>';
+            }).join('');
         }
 
         function scrollToPublication(id) {
-            document.getElementById(`pub-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            var el = document.getElementById('pub-' + id);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             toggleBookmarks();
         }
 
@@ -1150,53 +1155,53 @@ Incluye TODOS los documentos relevantes que encuentres: leyes, decretos ejecutiv
 
         // ─── Stats ────────────────────────────────────────────────────────────
         function updateStats() {
-            document.getElementById('totalCount').textContent    = publications.length;
-            document.getElementById('filteredCount').textContent = filteredPublications.length;
+            document.getElementById('totalCount').textContent     = publications.length;
+            document.getElementById('filteredCount').textContent  = filteredPublications.length;
             document.getElementById('bookmarkedCount').textContent = bookmarkedIds.size;
             document.getElementById('bookmarkCount').textContent   = bookmarkedIds.size;
         }
 
         // ─── Helpers ──────────────────────────────────────────────────────────
         function getTypeLabel(type) {
-            return { ley:'Ley', decreto:'Decreto', resolucion:'Resolución',
-                     aviso:'Aviso', acuerdo:'Acuerdo', otro:'Otro' }[type] || 'Otro';
+            var map = { ley:'Ley', decreto:'Decreto', resolucion:'Resolucion', aviso:'Aviso', acuerdo:'Acuerdo', otro:'Otro' };
+            return map[type] || 'Otro';
         }
 
         function formatDate(dateStr) {
-            const [y,m,d] = dateStr.split('-').map(Number);
-            return new Date(y, m-1, d).toLocaleDateString('es-CR',
-                { year:'numeric', month:'long', day:'numeric' });
+            var parts = dateStr.split('-').map(Number);
+            return new Date(parts[0], parts[1]-1, parts[2]).toLocaleDateString('es-CR', { year:'numeric', month:'long', day:'numeric' });
         }
 
         function copyToClipboard(id) {
-            const pub = publications.find(p => p.id === id);
-            const text = `${pub.title}\n${pub.institution} · ${pub.number}\n${formatDate(pub.date)}\n\n${pub.content}`;
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = document.querySelector(`#pub-${id} .icon-btn[title*="Copiar"]`);
-                if (btn) { btn.textContent = '✓'; setTimeout(() => btn.textContent = '📋', 1500); }
+            var pub  = publications.find(function(p) { return p.id === id; });
+            var text = pub.title + '\n' + pub.institution + ' - ' + pub.number + '\n' + formatDate(pub.date) + '\n\n' + pub.content;
+            navigator.clipboard.writeText(text).then(function() {
+                var btn = document.querySelector('#pub-' + id + ' .icon-btn[title*="Copiar"]');
+                if (btn) { btn.textContent = '\u2713'; setTimeout(function() { btn.textContent = '\uD83D\uDCCB'; }, 1500); }
             });
         }
 
         function exportBookmarks() {
-            const bookmarked = publications.filter(p => bookmarkedIds.has(p.id));
-            if (bookmarked.length === 0) { alert('No hay documentos marcados para exportar'); return; }
+            var bookmarked = publications.filter(function(p) { return bookmarkedIds.has(p.id); });
+            if (!bookmarked.length) { alert('No hay documentos marcados para exportar'); return; }
 
-            let txt = '='.repeat(80) + '\n';
-            txt += 'DOCUMENTOS JURÍDICOS SELECCIONADOS — LA GACETA DE COSTA RICA\n';
-            txt += `Exportado: ${new Date().toLocaleString('es-CR')}\n`;
-            txt += '='.repeat(80) + '\n\n';
-            bookmarked.forEach((pub, i) => {
-                txt += `${i+1}. ${pub.title}\n${'-'.repeat(80)}\n`;
-                txt += `Categoría: ${getTypeLabel(pub.type)}\nInstitución: ${pub.institution}\n`;
-                txt += `Número: ${pub.number}\nFecha: ${formatDate(pub.date)}\n`;
-                txt += `Materias: ${pub.tags.join(', ')}\n\nContenido:\n${pub.content}\n\n`;
+            var txt = '='.repeat(80) + '\n'
+                + 'DOCUMENTOS JURIDICOS SELECCIONADOS - LA GACETA DE COSTA RICA\n'
+                + 'Exportado: ' + new Date().toLocaleString('es-CR') + '\n'
+                + '='.repeat(80) + '\n\n';
+
+            bookmarked.forEach(function(pub, i) {
+                txt += (i+1) + '. ' + pub.title + '\n' + '-'.repeat(80) + '\n';
+                txt += 'Categoria: ' + getTypeLabel(pub.type) + '\nInstitucion: ' + pub.institution + '\n';
+                txt += 'Numero: ' + pub.number + '\nFecha: ' + formatDate(pub.date) + '\n';
+                txt += 'Materias: ' + pub.tags.join(', ') + '\n\nContenido:\n' + pub.content + '\n\n';
+                txt += 'PDF: ' + pub.pdfUrl + '\n';
                 txt += '='.repeat(80) + '\n\n';
             });
 
-            const a = Object.assign(document.createElement('a'), {
-                href: URL.createObjectURL(new Blob([txt], { type:'text/plain' })),
-                download: `gaceta-${new Date().toISOString().split('T')[0]}.txt`
-            });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+            a.download = 'gaceta-' + new Date().toISOString().split('T')[0] + '.txt';
             a.click();
         }
 
