@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lector Inteligente - La Gaceta CR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2d5016;
+            --primary-dark: #1a3009;
+            --secondary: #4a7c2c;
+            --accent: #6b9d45;
+            --bg: #0a0a0a;
+            --surface: #1a1a1a;
+            --surface-elevated: #242424;
+            --text: #e8e8e8;
+            --text-secondary: #b8b8b8;
+            --text-muted: #888888;
+            --border: #333333;
+            --border-light: #404040;
+            --success: #4a7c2c;
+            --warning: #8b7d3a;
+            --highlight: #2d5016;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        .header {
+            background: linear-gradient(to bottom, #000000, #1a1a1a);
+            color: var(--text);
+            padding: 2.5rem 2rem;
+            border-bottom: 3px solid var(--primary);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            color: var(--accent);
+            font-family: 'Georgia', serif;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-style: italic;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .controls {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .search-box {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 300px;
+            padding: 0.875rem 1.125rem;
+            border: 2px solid var(--border);
+            border-radius: 2px;
+            font-size: 1rem;
+            font-family: 'Georgia', serif;
+            transition: all 0.3s;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(45, 80, 22, 0.15);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .btn {
+            padding: 0.875rem 1.75rem;
+            border: 1px solid var(--border-light);
+            border-radius: 2px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Georgia', serif;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--text);
+            border-color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            background: var(--secondary);
+            border-color: var(--secondary);
+            box-shadow: 0 2px 8px rgba(45, 80, 22, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border-color: var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-elevated);
+            border-color: var(--border-light);
+        }
+
+        .filters {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .filter-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-family: sans-serif;
+        }
+
+        select, input[type="date"] {
+            padding: 0.625rem 1rem;
+            border: 2px solid var(--border);
+            border-radius: 2px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Georgia', serif;
+        }
+
+        select:focus, input[type="date"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .filter-tags {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .tag {
+            padding: 0.5rem 1rem;
+            border-radius: 2px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+            font-family: sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 500;
+        }
+
+        .tag.active {
+            background: var(--primary);
+            color: var(--text);
+            border-color: var(--primary);
+        }
+
+        .tag:not(.active) {
+            background: transparent;
+            color: var(--text-muted);
+            border-color: var(--border);
+        }
+
+        .tag:hover {
+            border-color: var(--primary);
+            color: var(--text);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            padding: 1.75rem;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border-left: 3px solid var(--primary);
+        }
+
+        .stat-card h3 {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.75rem;
+            font-weight: 500;
+            font-family: sans-serif;
+        }
+
+        .stat-card .number {
+            font-size: 2.25rem;
+            font-weight: 300;
+            color: var(--accent);
+            font-family: 'Georgia', serif;
+        }
+
+        .publications {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .publication-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            padding: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border-left: 3px solid var(--primary);
+            transition: all 0.3s;
+        }
+
+        .publication-card:hover {
+            box-shadow: 0 4px 16px rgba(45, 80, 22, 0.4);
+            border-left-width: 4px;
+        }
+
+        .publication-card.bookmarked {
+            border-left-color: var(--accent);
+            background: linear-gradient(to right, rgba(107, 157, 69, 0.05), var(--surface));
+        }
+
+        .publication-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .publication-type {
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            border: 1px solid;
+            border-radius: 2px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-family: sans-serif;
+        }
+
+        .type-ley { 
+            background: rgba(45, 80, 22, 0.15); 
+            color: var(--accent); 
+            border-color: var(--primary);
+        }
+        .type-decreto { 
+            background: rgba(74, 124, 44, 0.15); 
+            color: #6b9d45; 
+            border-color: var(--secondary);
+        }
+        .type-resolucion { 
+            background: rgba(107, 157, 69, 0.15); 
+            color: #8bb869; 
+            border-color: var(--accent);
+        }
+        .type-aviso { 
+            background: rgba(139, 125, 58, 0.15); 
+            color: #b8a858; 
+            border-color: var(--warning);
+        }
+        .type-acuerdo { 
+            background: rgba(74, 124, 44, 0.15); 
+            color: #6b9d45; 
+            border-color: var(--secondary);
+        }
+        .type-otro { 
+            background: rgba(136, 136, 136, 0.15); 
+            color: var(--text-muted); 
+            border-color: var(--border);
+        }
+
+        .publication-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.4rem 0.5rem;
+            transition: all 0.3s;
+            border-radius: 2px;
+            color: var(--text-muted);
+        }
+
+        .icon-btn:hover {
+            background: var(--surface-elevated);
+            border-color: var(--primary);
+            color: var(--accent);
+        }
+
+        .publication-title {
+            font-size: 1.3rem;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 1rem;
+            line-height: 1.5;
+            font-family: 'Georgia', serif;
+        }
+
+        .publication-meta {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.25rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .publication-content {
+            color: var(--text-secondary);
+            line-height: 1.9;
+            margin-bottom: 1.5rem;
+            text-align: justify;
+            font-size: 1rem;
+        }
+
+        .publication-content mark {
+            background: rgba(45, 80, 22, 0.3);
+            padding: 0.1rem 0.3rem;
+            border-radius: 2px;
+            color: var(--accent);
+        }
+
+        .publication-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .tags-list {
+            display: flex;
+            gap: 0.625rem;
+            flex-wrap: wrap;
+        }
+
+        .content-tag {
+            padding: 0.3rem 0.75rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        .expand-btn {
+            color: var(--accent);
+            background: none;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.875rem;
+            padding: 0.4rem 1rem;
+            border-radius: 2px;
+            transition: all 0.3s;
+            font-family: 'Georgia', serif;
+        }
+
+        .expand-btn:hover {
+            background: var(--surface-elevated);
+            border-color: var(--primary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 5rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            opacity: 0.2;
+            margin-bottom: 1.5rem;
+            stroke: var(--accent);
+        }
+
+        .empty-state h3 {
+            font-family: 'Georgia', serif;
+            font-weight: 400;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem;
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .bookmarks-panel {
+            position: fixed;
+            right: -450px;
+            top: 0;
+            width: 450px;
+            height: 100vh;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            box-shadow: -6px 0 24px rgba(0,0,0,0.5);
+            transition: right 0.3s;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .bookmarks-panel.open {
+            right: 0;
+        }
+
+        .bookmarks-header {
+            padding: 2rem;
+            background: var(--bg);
+            color: var(--text);
+            position: sticky;
+            top: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .bookmarks-header h2 {
+            font-family: 'Georgia', serif;
+            font-weight: 400;
+            font-size: 1.3rem;
+            color: var(--accent);
+        }
+
+        .bookmarks-content {
+            padding: 1.5rem;
+        }
+
+        .bookmark-item {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .bookmark-item:hover {
+            background: var(--surface-elevated);
+        }
+
+        .bookmark-item h4 {
+            font-family: 'Georgia', serif;
+            font-weight: 500;
+        }
+
+        .bookmark-item small {
+            font-family: sans-serif;
+        }
+
+        /* Optimización para iPad (768px - 1024px) */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            .container {
+                max-width: 100%;
+                padding: 1.5rem;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .search-box {
+                flex-direction: row;
+            }
+
+            .search-input {
+                min-width: 250px;
+            }
+        }
+
+        /* Mobile y tablets pequeñas */
+        @media (max-width: 767px) {
+            .header {
+                padding: 1.5rem 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .controls {
+                padding: 1.25rem;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            .search-input {
+                min-width: 100%;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .filters {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filter-group {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .filter-group select,
+            .filter-group input[type="date"] {
+                width: 100%;
+            }
+
+            .bookmarks-panel {
+                width: 100%;
+                right: -100%;
+            }
+
+            .publication-card {
+                padding: 1.5rem;
+            }
+
+            .publication-meta {
+                gap: 1rem;
+            }
+        }
+
+        /* iPad Pro y pantallas grandes */
+        @media (min-width: 1025px) {
+            .container {
+                max-width: 1280px;
+            }
+        }
+
+        .highlight-term {
+            background: rgba(107, 157, 69, 0.3);
+            padding: 0.1rem 0.25rem;
+            border-radius: 2px;
+            font-weight: 500;
+            color: var(--accent);
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 5rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .loading-state h3 {
+            font-family: 'Georgia', serif;
+            font-weight: 400;
+            font-size: 1.3rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .loading-state p {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .loading-sub {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-muted) !important;
+        }
+
+        .loading-spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 2rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .edition-badge {
+            display: inline-block;
+            margin-top: 0.75rem;
+            padding: 0.4rem 1rem;
+            background: rgba(45, 80, 22, 0.3);
+            border: 1px solid var(--primary);
+            border-radius: 2px;
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-family: sans-serif;
+            letter-spacing: 0.3px;
+        }
+
+        .reload-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 0.4rem 0.875rem;
+            border-radius: 2px;
+            cursor: pointer;
+            font-family: sans-serif;
+            transition: all 0.3s;
+            margin-left: 1rem;
+        }
+
+        .reload-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>⚖️ Sistema de Análisis Jurídico — La Gaceta</h1>
+            <p>Plataforma de investigación y consulta de publicaciones oficiales de la República de Costa Rica</p>
+            <div style="margin-top:0.75rem">
+                <span class="edition-badge" id="editionBadge">Iniciando…</span>
+                <button class="reload-btn" onclick="fetchGacetaDelDia()">↺ Recargar edición</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <div class="search-box">
+                <input type="text" id="searchInput" class="search-input" placeholder="Buscar por materia, número de expediente, institución emisora, o texto legal...">
+                <button class="btn btn-primary" onclick="searchPublications()">🔍 Buscar</button>
+                <button class="btn btn-secondary" onclick="clearFilters()">✕ Limpiar filtros</button>
+                <button class="btn btn-primary" onclick="toggleBookmarks()">★ Marcados (<span id="bookmarkCount">0</span>)</button>
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Publicación:</label>
+                    <input type="date" id="dateFilter" onchange="applyFilters()">
+                </div>
+                
+                <div class="filter-group">
+                    <label>Categoría:</label>
+                    <select id="typeFilter" onchange="applyFilters()">
+                        <option value="">Todas las categorías</option>
+                        <option value="ley">Leyes</option>
+                        <option value="decreto">Decretos Ejecutivos</option>
+                        <option value="resolucion">Resoluciones</option>
+                        <option value="acuerdo">Acuerdos</option>
+                        <option value="aviso">Avisos Oficiales</option>
+                        <option value="otro">Otros Actos</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Ordenar:</label>
+                    <select id="sortFilter" onchange="applyFilters()">
+                        <option value="date-desc">Más reciente primero</option>
+                        <option value="date-asc">Más antiguo primero</option>
+                        <option value="relevance">Por relevancia</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-secondary" onclick="exportBookmarks()">⬇ Exportar selección</button>
+                <button class="btn btn-secondary" onclick="fetchGacetaDelDia()">↺ Recargar del día</button>
+            </div>
+
+            <div class="filter-tags">
+                <span class="tag" onclick="toggleTag(this, 'tributario')">Derecho Tributario</span>
+                <span class="tag" onclick="toggleTag(this, 'laboral')">Derecho Laboral</span>
+                <span class="tag" onclick="toggleTag(this, 'penal')">Derecho Penal</span>
+                <span class="tag" onclick="toggleTag(this, 'administrativo')">Derecho Administrativo</span>
+                <span class="tag" onclick="toggleTag(this, 'ambiental')">Derecho Ambiental</span>
+                <span class="tag" onclick="toggleTag(this, 'comercial')">Derecho Comercial</span>
+                <span class="tag" onclick="toggleTag(this, 'constitucional')">Derecho Constitucional</span>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total de documentos</h3>
+                <div class="number" id="totalCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Documentos filtrados</h3>
+                <div class="number" id="filteredCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Documentos marcados</h3>
+                <div class="number" id="bookmarkedCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Última actualización</h3>
+                <div class="number" style="font-size: 1.2rem;" id="lastUpdate">--</div>
+            </div>
+        </div>
+
+        <div id="publicationsContainer" class="publications">
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <h3>No hay documentos legales cargados</h3>
+                <p>Utilice el botón "Cargar documentos de ejemplo" para visualizar publicaciones de muestra<br>o integre el sistema con el repositorio oficial de La Gaceta</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bookmarks-panel" id="bookmarksPanel">
+        <div class="bookmarks-header">
+            <h2>★ Documentos marcados para revisión</h2>
+            <button class="icon-btn" style="color: var(--text); font-size: 1.5rem;" onclick="toggleBookmarks()">✕</button>
+        </div>
+        <div class="bookmarks-content" id="bookmarksContent">
+            <div class="empty-state">
+                <p>No hay documentos marcados para revisión</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let publications = [];
+        let filteredPublications = [];
+        let bookmarkedIds = new Set();
+        let activeTags = new Set();
+        let currentSearchTerm = '';
+
+        // ─── Clasificación automática por tipo y materia ───────────────────────
+        function detectType(title = '', alcance = '') {
+            const t = (title + ' ' + alcance).toLowerCase();
+            if (/\bley\b|\bley n[°º]/.test(t)) return 'ley';
+            if (/decreto/.test(t)) return 'decreto';
+            if (/resoluci[oó]n/.test(t)) return 'resolucion';
+            if (/acuerdo/.test(t)) return 'acuerdo';
+            if (/aviso|convocatoria|comunicado/.test(t)) return 'aviso';
+            return 'otro';
+        }
+
+        function detectTags(title = '', content = '') {
+            const t = (title + ' ' + content).toLowerCase();
+            const map = {
+                'tributario':      /tribut|impuesto|hacienda|iva|renta|fiscal/,
+                'laboral':         /trabajo|laboral|empleo|trabajador|salario|jornada/,
+                'penal':           /penal|delito|sanci[oó]n|infracci[oó]n|pena/,
+                'administrativo':  /administrativ|reglamento|decreto|procedimiento|concesión/,
+                'ambiental':       /ambiental|ambiente|recurso natural|minae|contaminaci[oó]n/,
+                'comercial':       /comercial|mercantil|sociedad|empresa|concurso|quiebra/,
+                'constitucional':  /constitucional|sala iv|sala constitucional|derechos fundamentales/,
+            };
+            return Object.entries(map)
+                .filter(([, re]) => re.test(t))
+                .map(([tag]) => tag);
+        }
+
+        // ─── Parseo del HTML de la Gaceta ─────────────────────────────────────
+        function parseGacetaHTML(html, dateStr) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const results = [];
+            let id = 1;
+
+            // La Gaceta estructura sus alcances/artículos con <article> o <div class="documento">
+            // También hay tablas con filas por publicación
+            const selectors = [
+                'article',
+                '.documento',
+                '.publicacion',
+                'tr[id]',
+                '.row-item'
+            ];
+
+            let nodes = [];
+            for (const sel of selectors) {
+                nodes = [...doc.querySelectorAll(sel)];
+                if (nodes.length > 0) break;
+            }
+
+            // Si no se encontró estructura conocida, extraer por h2/h3 + párrafos
+            if (nodes.length === 0) {
+                const headings = [...doc.querySelectorAll('h2, h3, h4')];
+                headings.forEach(h => {
+                    const title = h.textContent.trim();
+                    if (!title || title.length < 10) return;
+                    let content = '';
+                    let el = h.nextElementSibling;
+                    let count = 0;
+                    while (el && count < 5) {
+                        if (el.matches('h2,h3,h4')) break;
+                        content += el.textContent.trim() + ' ';
+                        el = el.nextElementSibling;
+                        count++;
+                    }
+                    if (!content.trim()) return;
+                    const type = detectType(title);
+                    const tags = detectTags(title, content);
+                    results.push({ id: id++, type, title, date: dateStr,
+                        institution: extractInstitution(title), number: extractNumber(title),
+                        content: content.trim(), tags });
+                });
+            } else {
+                nodes.forEach(node => {
+                    const title = (
+                        node.querySelector('h2, h3, h4, .titulo, .title, strong')?.textContent ||
+                        node.querySelector('td:first-child')?.textContent || ''
+                    ).trim();
+                    if (!title || title.length < 8) return;
+                    const content = node.textContent.replace(title, '').trim().substring(0, 1200);
+                    const type = detectType(title);
+                    const tags = detectTags(title, content);
+                    results.push({ id: id++, type, title, date: dateStr,
+                        institution: extractInstitution(title), number: extractNumber(title),
+                        content, tags });
+                });
+            }
+
+            return results;
+        }
+
+        function extractInstitution(title = '') {
+            const patterns = [
+                /ministerio de [\w\s]+/i,
+                /asamblea legislativa/i,
+                /sala constitucional/i,
+                /poder judicial/i,
+                /presidencia de la rep[uú]blica/i,
+                /banco central/i,
+                /contraloría/i,
+            ];
+            for (const re of patterns) {
+                const m = title.match(re);
+                if (m) return m[0].replace(/\b\w/g, c => c.toUpperCase());
+            }
+            return 'Institución pública';
+        }
+
+        function extractNumber(title = '') {
+            const m = title.match(/n[°º\.]\s*[\d\-]+/i) ||
+                      title.match(/\d{4,6}[-\w]*/);
+            return m ? m[0] : '—';
+        }
+
+        // ─── Carga real de la Gaceta del día ──────────────────────────────────
+        async function fetchGacetaDelDia() {
+            const today = new Date();
+            // La Gaceta CR no publica sábados ni domingos
+            const dow = today.getDay(); // 0=dom,6=sab
+            if (dow === 0) today.setDate(today.getDate() - 2);
+            if (dow === 6) today.setDate(today.getDate() - 1);
+
+            const yyyy = today.getFullYear();
+            const mm   = String(today.getMonth() + 1).padStart(2, '0');
+            const dd   = String(today.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            const dateLabel = today.toLocaleDateString('es-CR', { weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+            showLoading(dateLabel);
+
+            // URLs que intenta la Imprenta Nacional para la edición del día
+            const proxyBase = 'https://api.allorigins.win/get?url=';
+            const gacetaUrls = [
+                `https://www.imprentanacional.go.cr/gaceta/`,
+                `https://www.imprentanacional.go.cr/editorialportal/gaceta/pub/${yyyy}/${mm}/${dd}/`,
+                `https://www.imprentanacional.go.cr/gaceta/alcances/`,
+            ];
+
+            let fetched = false;
+            for (const url of gacetaUrls) {
+                try {
+                    const resp = await fetch(proxyBase + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+                    if (!resp.ok) continue;
+                    const data = await resp.json();
+                    const html = data.contents;
+                    if (!html) continue;
+
+                    const parsed = parseGacetaHTML(html, dateStr);
+                    if (parsed.length > 0) {
+                        publications = parsed;
+                        filteredPublications = [...publications];
+                        updateStats();
+                        renderPublications();
+                        document.getElementById('lastUpdate').textContent =
+                            new Date().toLocaleTimeString('es-CR', {hour:'2-digit', minute:'2-digit'});
+                        setEditionBadge(dateLabel, publications.length, url);
+                        fetched = true;
+                        break;
+                    }
+                } catch (_) { /* siguiente URL */ }
+            }
+
+            if (!fetched) {
+                // Si el proxy falla o la Gaceta no tiene edición hoy,
+                // mostrar enlace directo al sitio oficial
+                showFallbackState(dateLabel, yyyy, mm, dd);
+            }
+        }
+
+        function showLoading(dateLabel) {
+            document.getElementById('publicationsContainer').innerHTML = `
+                <div class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <h3>Consultando La Gaceta</h3>
+                    <p>${dateLabel}</p>
+                    <p class="loading-sub">Conectando con la Imprenta Nacional de Costa Rica…</p>
+                </div>`;
+            document.getElementById('editionBadge').textContent = 'Cargando edición del día…';
+        }
+
+        function showFallbackState(dateLabel, yyyy, mm, dd) {
+            const directUrl = `https://www.imprentanacional.go.cr/gaceta/`;
+            document.getElementById('publicationsContainer').innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <h3>No fue posible conectar automáticamente</h3>
+                    <p style="margin-bottom:1.5rem">
+                        El sitio de la Imprenta Nacional puede requerir acceso directo desde el navegador.<br>
+                        Edición consultada: <strong>${dateLabel}</strong>
+                    </p>
+                    <a href="${directUrl}" target="_blank" class="btn btn-primary" style="display:inline-block; text-decoration:none; padding:0.875rem 2rem;">
+                        Abrir La Gaceta oficial →
+                    </a>
+                    <p style="margin-top:1.5rem; font-size:0.85rem; color:var(--text-muted)">
+                        También puede pegar el texto de la Gaceta en la sección de importación manual.
+                    </p>
+                </div>`;
+            document.getElementById('editionBadge').textContent = dateLabel;
+        }
+
+        function setEditionBadge(dateLabel, count, source) {
+            document.getElementById('editionBadge').textContent =
+                `Edición del ${dateLabel} · ${count} documentos`;
+        }
+
+        // ─── Render y utilidades ──────────────────────────────────────────────
+
+        function renderPublications() {
+            const container = document.getElementById('publicationsContainer');
+            
+            if (filteredPublications.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <h3>No se encontraron resultados</h3>
+                        <p>Verifique los criterios de búsqueda y filtros aplicados</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredPublications.map(pub => {
+                const isBookmarked = bookmarkedIds.has(pub.id);
+                const preview = pub.content.substring(0, 300) + '...';
+                const highlighted = highlightSearchTerm(preview, currentSearchTerm);
+                
+                return `
+                    <div class="publication-card ${isBookmarked ? 'bookmarked' : ''}" id="pub-${pub.id}">
+                        <div class="publication-header">
+                            <span class="publication-type type-${pub.type}">${getTypeLabel(pub.type)}</span>
+                            <div class="publication-actions">
+                                <button class="icon-btn" onclick="toggleBookmark(${pub.id})" title="${isBookmarked ? 'Quitar marca' : 'Marcar para revisión'}">
+                                    ${isBookmarked ? '★' : '☆'}
+                                </button>
+                                <button class="icon-btn" onclick="copyToClipboard(${pub.id})" title="Copiar al portapapeles">📋</button>
+                                <button class="icon-btn" onclick="sharePublication(${pub.id})" title="Compartir documento">🔗</button>
+                            </div>
+                        </div>
+                        
+                        <h3 class="publication-title">${highlightSearchTerm(pub.title, currentSearchTerm)}</h3>
+                        
+                        <div class="publication-meta">
+                            <span class="meta-item">📅 ${formatDate(pub.date)}</span>
+                            <span class="meta-item">🏛️ ${pub.institution}</span>
+                            <span class="meta-item">📄 ${pub.number}</span>
+                        </div>
+                        
+                        <div class="publication-content" id="content-${pub.id}">
+                            ${highlighted}
+                        </div>
+                        
+                        <div class="publication-footer">
+                            <div class="tags-list">
+                                ${pub.tags.map(tag => `<span class="content-tag">#${tag}</span>`).join('')}
+                            </div>
+                            <button class="expand-btn" onclick="toggleExpand(${pub.id})">
+                                Ver texto completo →
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleExpand(id) {
+            const pub = publications.find(p => p.id === id);
+            const contentDiv = document.getElementById(`content-${id}`);
+            const btn = event.target;
+            
+            if (btn.textContent.includes('Ver texto completo')) {
+                contentDiv.innerHTML = highlightSearchTerm(pub.content, currentSearchTerm);
+                btn.textContent = '← Contraer texto';
+            } else {
+                const preview = pub.content.substring(0, 300) + '...';
+                contentDiv.innerHTML = highlightSearchTerm(preview, currentSearchTerm);
+                btn.textContent = 'Ver texto completo →';
+            }
+        }
+
+        function highlightSearchTerm(text, term) {
+            if (!term) return text;
+            const regex = new RegExp(`(${term})`, 'gi');
+            return text.replace(regex, '<span class="highlight-term">$1</span>');
+        }
+
+        function toggleBookmark(id) {
+            if (bookmarkedIds.has(id)) {
+                bookmarkedIds.delete(id);
+            } else {
+                bookmarkedIds.add(id);
+            }
+            updateStats();
+            renderPublications();
+            updateBookmarksPanel();
+        }
+
+        function updateBookmarksPanel() {
+            const content = document.getElementById('bookmarksContent');
+            const bookmarked = publications.filter(p => bookmarkedIds.has(p.id));
+            
+            if (bookmarked.length === 0) {
+                content.innerHTML = '<div class="empty-state"><p>No hay documentos marcados para revisión</p></div>';
+                return;
+            }
+            
+            content.innerHTML = bookmarked.map(pub => `
+                <div class="bookmark-item" onclick="scrollToPublication(${pub.id})">
+                    <span class="publication-type type-${pub.type}">${getTypeLabel(pub.type)}</span>
+                    <h4 style="margin: 0.5rem 0; font-size: 0.95rem;">${pub.title}</h4>
+                    <small style="color: var(--text-light);">${formatDate(pub.date)} - ${pub.institution}</small>
+                </div>
+            `).join('');
+        }
+
+        function scrollToPublication(id) {
+            document.getElementById(`pub-${id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            toggleBookmarks();
+        }
+
+        function toggleBookmarks() {
+            document.getElementById('bookmarksPanel').classList.toggle('open');
+        }
+
+        function searchPublications() {
+            currentSearchTerm = document.getElementById('searchInput').value.toLowerCase();
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const typeFilter = document.getElementById('typeFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+            const sortFilter = document.getElementById('sortFilter').value;
+            
+            currentSearchTerm = searchTerm;
+            
+            filteredPublications = publications.filter(pub => {
+                const matchesSearch = !searchTerm || 
+                    pub.title.toLowerCase().includes(searchTerm) ||
+                    pub.content.toLowerCase().includes(searchTerm) ||
+                    pub.institution.toLowerCase().includes(searchTerm) ||
+                    pub.number.toLowerCase().includes(searchTerm);
+                
+                const matchesType = !typeFilter || pub.type === typeFilter;
+                const matchesDate = !dateFilter || pub.date === dateFilter;
+                const matchesTags = activeTags.size === 0 || pub.tags.some(tag => activeTags.has(tag));
+                
+                return matchesSearch && matchesType && matchesDate && matchesTags;
+            });
+            
+            // Ordenar
+            if (sortFilter === 'date-desc') {
+                filteredPublications.sort((a, b) => new Date(b.date) - new Date(a.date));
+            } else if (sortFilter === 'date-asc') {
+                filteredPublications.sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+            
+            updateStats();
+            renderPublications();
+        }
+
+        function toggleTag(element, tag) {
+            element.classList.toggle('active');
+            if (activeTags.has(tag)) {
+                activeTags.delete(tag);
+            } else {
+                activeTags.add(tag);
+            }
+            applyFilters();
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('typeFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            document.getElementById('sortFilter').value = 'date-desc';
+            currentSearchTerm = '';
+            activeTags.clear();
+            
+            document.querySelectorAll('.tag.active').forEach(tag => {
+                tag.classList.remove('active');
+            });
+            
+            filteredPublications = [...publications];
+            updateStats();
+            renderPublications();
+        }
+
+        function updateStats() {
+            document.getElementById('totalCount').textContent = publications.length;
+            document.getElementById('filteredCount').textContent = filteredPublications.length;
+            document.getElementById('bookmarkedCount').textContent = bookmarkedIds.size;
+            document.getElementById('bookmarkCount').textContent = bookmarkedIds.size;
+        }
+
+        function getTypeLabel(type) {
+            const labels = {
+                'ley': 'Ley',
+                'decreto': 'Decreto',
+                'resolucion': 'Resolución',
+                'aviso': 'Aviso',
+                'acuerdo': 'Acuerdo',
+                'otro': 'Otro'
+            };
+            return labels[type] || 'Otro';
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('es-CR', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        function copyToClipboard(id) {
+            const pub = publications.find(p => p.id === id);
+            const text = `${pub.title}\n\n${pub.institution} - ${pub.number}\nFecha: ${formatDate(pub.date)}\n\n${pub.content}`;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Contenido copiado al portapapeles');
+            });
+        }
+
+        function sharePublication(id) {
+            const pub = publications.find(p => p.id === id);
+            const shareData = {
+                title: pub.title,
+                text: `${pub.title} - ${pub.institution}`,
+                url: window.location.href
+            };
+            
+            if (navigator.share) {
+                navigator.share(shareData);
+            } else {
+                copyToClipboard(id);
+            }
+        }
+
+        function exportBookmarks() {
+            const bookmarked = publications.filter(p => bookmarkedIds.has(p.id));
+            
+            if (bookmarked.length === 0) {
+                alert('No hay documentos marcados para exportar');
+                return;
+            }
+            
+            let exportText = '='.repeat(80) + '\n';
+            exportText += 'DOCUMENTOS JURÍDICOS SELECCIONADOS - LA GACETA DE COSTA RICA\n';
+            exportText += 'Fecha de exportación: ' + new Date().toLocaleString('es-CR') + '\n';
+            exportText += '='.repeat(80) + '\n\n';
+            
+            bookmarked.forEach((pub, index) => {
+                exportText += `${index + 1}. ${pub.title}\n`;
+                exportText += '-'.repeat(80) + '\n';
+                exportText += `Categoría: ${getTypeLabel(pub.type)}\n`;
+                exportText += `Institución emisora: ${pub.institution}\n`;
+                exportText += `Número de expediente: ${pub.number}\n`;
+                exportText += `Fecha de publicación: ${formatDate(pub.date)}\n`;
+                exportText += `Materias: ${pub.tags.map(t => '#' + t).join(', ')}\n\n`;
+                exportText += `CONTENIDO LEGAL:\n${pub.content}\n\n`;
+                exportText += '='.repeat(80) + '\n\n';
+            });
+            
+            const blob = new Blob([exportText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gaceta-seleccion-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Al cargar la página, consulta automáticamente la Gaceta del día
+        window.addEventListener('load', () => {
+            fetchGacetaDelDia();
+        });
+    </script>
+</body>
+</html>
